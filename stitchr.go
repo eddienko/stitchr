@@ -105,7 +105,8 @@ func loadListFile(filename string) ([]string, error) {
 }
 
 // sumImages adds src onto dst at position (x0,y0), summing RGB values
-func sumImages(dst *image.RGBA, src image.Image, x0, y0 int) {
+// sumImagesGray16 adds src onto dst at position (x0, y0), summing pixel values
+func sumImages(dst *image.Gray16, src image.Image, x0, y0 int) {
 	bounds := src.Bounds()
 	for y := 0; y < bounds.Dy(); y++ {
 		for x := 0; x < bounds.Dx(); x++ {
@@ -115,70 +116,19 @@ func sumImages(dst *image.RGBA, src image.Image, x0, y0 int) {
 				continue
 			}
 
-			srcC := color.RGBAModel.Convert(src.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.RGBA)
-			dstC := dst.RGBAAt(dstX, dstY)
+			// Convert source pixel to 16-bit grayscale
+			srcGray := color.Gray16Model.Convert(src.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.Gray16)
 
-			r := dstC.R + srcC.R
-			if r > 255 {
-				r = 255
-			}
-			g := dstC.G + srcC.G
-			if g > 255 {
-				g = 255
-			}
-			b := dstC.B + srcC.B
-			if b > 255 {
-				b = 255
-			}
-			a := dstC.A + srcC.A
-			if a > 255 {
-				a = 255
+			// Get current destination pixel
+			dstGray := dst.Gray16At(dstX, dstY)
+
+			// Sum and clamp to 65535
+			sum := uint32(dstGray.Y) + uint32(srcGray.Y)
+			if sum > 65535 {
+				sum = 65535
 			}
 
-			dst.SetRGBA(dstX, dstY, color.RGBA{r, g, b, a})
-		}
-	}
-}
-
-// blendImages blends src onto dst at position (x0,y0) with overlapX and overlapY
-func blendImages(dst *image.RGBA, src image.Image, x0, y0, overlapX, overlapY int) {
-	bounds := src.Bounds()
-	for y := 0; y < bounds.Dy(); y++ {
-		for x := 0; x < bounds.Dx(); x++ {
-			dstX := x0 + x
-			dstY := y0 + y
-			if dstX >= dst.Bounds().Dx() || dstY >= dst.Bounds().Dy() {
-				continue
-			}
-
-			srcC := color.RGBAModel.Convert(src.At(bounds.Min.X+x, bounds.Min.Y+y)).(color.RGBA)
-			dstC := dst.RGBAAt(dstX, dstY)
-
-			// Compute alpha based on proximity to overlap edges
-			alphaX := 1.0
-			alphaY := 1.0
-			if overlapX > 0 && x < overlapX {
-				alphaX = float64(x) / float64(overlapX)
-			} else if overlapX > 0 && x >= bounds.Dx()-overlapX {
-				alphaX = float64(bounds.Dx()-x-1) / float64(overlapX)
-			}
-			if overlapY > 0 && y < overlapY {
-				alphaY = float64(y) / float64(overlapY)
-			} else if overlapY > 0 && y >= bounds.Dy()-overlapY {
-				alphaY = float64(bounds.Dy()-y-1) / float64(overlapY)
-			}
-			alpha := alphaX
-			if alphaY < alpha {
-				alpha = alphaY
-			}
-
-			// Linear blend
-			r := uint8(float64(srcC.R)*alpha + float64(dstC.R)*(1-alpha))
-			g := uint8(float64(srcC.G)*alpha + float64(dstC.G)*(1-alpha))
-			b := uint8(float64(srcC.B)*alpha + float64(dstC.B)*(1-alpha))
-			a := uint8(float64(srcC.A)*alpha + float64(dstC.A)*(1-alpha))
-
-			dst.SetRGBA(dstX, dstY, color.RGBA{r, g, b, a})
+			dst.SetGray16(dstX, dstY, color.Gray16{uint16(sum)})
 		}
 	}
 }
@@ -198,7 +148,7 @@ func mosaic(imgs []image.Image, rows, cols int, overlapX, overlapY int, snake st
 	totalW := stepX*cols + overlapX
 	totalH := stepY*rows + overlapY
 
-	out := image.NewRGBA(image.Rect(0, 0, totalW, totalH))
+	out := image.NewGray16(image.Rect(0, 0, totalW, totalH))
 
 	idx := 0
 	switch snake {
@@ -341,8 +291,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	outGray := toGray(out)
-
 	f, err := os.Create(*output)
 	if err != nil {
 		log.Fatal(err)
@@ -350,7 +298,7 @@ func main() {
 	defer f.Close()
 
 	opts := &tiff.Options{Compression: tiff.Deflate, Predictor: true} // optional compression
-	if err := tiff.Encode(f, outGray, opts); err != nil {
+	if err := tiff.Encode(f, out, opts); err != nil {
 		log.Fatal(err)
 	}
 
