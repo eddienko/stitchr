@@ -41,12 +41,13 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
         run: |
           EXT=""
           if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
           OUT="stitchr-${GOOS}-${GOARCH}${EXT}"
           echo "🔨 Building $OUT"
-          go build -o "$OUT"
+          go build -ldflags "-X main.version=$VERSION" -o "$OUT"
 
       - name: Upload binaries to GitHub Release
         uses: softprops/action-gh-release@v1

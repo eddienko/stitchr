@@ -17,6 +17,8 @@ import (
 	"golang.org/x/image/tiff"
 )
 
+const version = "dev" // default version, overridden at build time
+
 func toGray(img image.Image) *image.Gray {
 	bounds := img.Bounds()
 	gray := image.NewGray(bounds)
@@ -213,6 +215,7 @@ func main() {
 	regexStr := flag.String("regex", "", "Optional regex to filter filenames in directory")
 	output := flag.String("out", "mosaic.tiff", "Output TIFF file")
 	snake := flag.String("snake", "vertical", "Snake pattern direction: vertical (default) or horizontal")
+	showVersion := flag.Bool("version", false, "Print stitchr version and exit")
 
 	flag.Usage = func() {
 		fmt.Printf("Usage of %s:\n", os.Args[0])
@@ -220,6 +223,12 @@ func main() {
 	}
 
 	flag.Parse()
+
+	// Handle --version first
+	if *showVersion {
+		fmt.Printf("stitchr version %s\n", version)
+		os.Exit(0)
+	}
 
 	// If no flags were provided, show usage and exit
 	if flag.NFlag() == 0 {
