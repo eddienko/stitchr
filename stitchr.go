@@ -65,20 +65,21 @@ func getImagePaths(dir string, regex *regexp.Regexp) ([]string, error) {
 	// Sort paths for consistent ordering
 	re := regexp.MustCompile(`-(\d+)_`)
 	sort.Slice(paths, func(i, j int) bool {
-		numI := 0
-		numJ := 0
+		numsI := re.FindAllStringSubmatch(paths[i], -1)
+		numsJ := re.FindAllStringSubmatch(paths[j], -1)
 
-		mI := re.FindStringSubmatch(paths[i])
-		if len(mI) > 1 {
-			numI, _ = strconv.Atoi(mI[1])
+		var nI, nJ int
+		if len(numsI) > 0 {
+			nI, _ = strconv.Atoi(numsI[len(numsI)-1][1]) // last match
+		}
+		if len(numsJ) > 0 {
+			nJ, _ = strconv.Atoi(numsJ[len(numsJ)-1][1]) // last match
 		}
 
-		mJ := re.FindStringSubmatch(paths[j])
-		if len(mJ) > 1 {
-			numJ, _ = strconv.Atoi(mJ[1])
+		if nI != nJ {
+			return nI < nJ
 		}
-
-		return numI < numJ
+		return paths[i] < paths[j] // fallback
 	})
 
 	return paths, nil
