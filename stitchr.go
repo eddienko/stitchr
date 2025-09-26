@@ -6,16 +6,27 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/png"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/nfnt/resize"
 	"golang.org/x/image/tiff"
 )
+
+func toGray(img image.Image) *image.Gray {
+	bounds := img.Bounds()
+	gray := image.NewGray(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			gray.Set(x, y, img.At(x, y))
+		}
+	}
+	return gray
+}
 
 // loadTIFF loads a TIFF image from disk
 func loadTIFF(path string) (image.Image, error) {
@@ -48,7 +59,26 @@ func getImagePaths(dir string, regex *regexp.Regexp) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(paths)
+
+	// Sort paths for consistent ordering
+	re := regexp.MustCompile(`-(\d+)_`)
+	sort.Slice(paths, func(i, j int) bool {
+		numI := 0
+		numJ := 0
+
+		mI := re.FindStringSubmatch(paths[i])
+		if len(mI) > 1 {
+			numI, _ = strconv.Atoi(mI[1])
+		}
+
+		mJ := re.FindStringSubmatch(paths[j])
+		if len(mJ) > 1 {
+			numJ, _ = strconv.Atoi(mJ[1])
+		}
+
+		return numI < numJ
+	})
+
 	return paths, nil
 }
 
@@ -231,7 +261,7 @@ func main() {
 	downsample := flag.Int("downsample", 1, "Downsample factor (integer >=1)")
 	listFile := flag.String("list", "", "Optional file containing list of images")
 	regexStr := flag.String("regex", "", "Optional regex to filter filenames in directory")
-	output := flag.String("out", "mosaic.png", "Output PNG file")
+	output := flag.String("out", "mosaic.tiff", "Output TIFF file")
 	snake := flag.String("snake", "vertical", "Snake pattern direction: vertical (default) or horizontal")
 
 	flag.Usage = func() {
@@ -311,14 +341,29 @@ func main() {
 		log.Fatal(err)
 	}
 
+	outGray := toGray(out)
+
 	f, err := os.Create(*output)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
-	if err := png.Encode(f, out); err != nil {
+
+	opts := &tiff.Options{Compression: tiff.Deflate, Predictor: true} // optional compression
+	if err := tiff.Encode(f, outGray, opts); err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Mosaic saved as %s\n", *output)
+	fmt.Printf("Mosaic saved as %s (grayscale TIFF)\n", *output)
+
+	// f, err := os.Create(*output)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer f.Close()
+	// if err := png.Encode(f, out); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// fmt.Printf("Mosaic saved as %s\n", *output)
 }
